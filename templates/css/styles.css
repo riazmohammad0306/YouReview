@@ -60,6 +60,10 @@ body {
   color: #fff;
 }
 
+.texte {
+  text-align: center; 
+}
+
 footer {
   color: #fff;
   font-size: 1rem;
@@ -71,3 +75,4 @@ a {
   color: #fff;
   text-decoration: none;
 }
+

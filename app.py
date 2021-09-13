@@ -30,6 +30,33 @@ import time
 app = Flask(__name__)
 Bootstrap(app)
 
+
+def traitement(x):
+    x=x.replace('\n',' ')
+    x=' '.join(word.strip(string.punctuation) for word in x.split())
+    x=x.lower()
+    return x
+
+# wget -O /tmp/lid.176.bin https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin
+PRETRAINED_MODEL_PATH = '/tmp/lid.176.bin'
+model = fasttext.load_model(PRETRAINED_MODEL_PATH)
+
+def get_lang(sentences):
+    
+    predictions = model.predict(sentences)
+    return predictions[0][0][-2:].upper()
+
+
+stop_words_fr = set(stopwords.words('french'))
+stop_words_en = set(stopwords.words('english'))
+
+def remove_stopwords(line):
+    word_tokens = word_tokenize(line)
+    ligne_filtre = [w for w in word_tokens if not w in stop_words_en]
+    return ' '.join(ligne_filtre)
+
+text_model = load('ModelAnalyseYoutube.joblib')
+    
 """
 @app.route("/")
 def home():
@@ -40,16 +67,14 @@ def home():
 @app.route('/about')
 def about_page(): 
     return "<h1>About Page</h1>"
-"""
-"""
+
 Dynamic routing 
 
 @app.route('/about/<username>')
 def about_page(username): 
     return f'<h1> This is the about page of {username}</h1>'
-"""
 
-"""
+
 Templates directory by convention using Flask
 which contains different HTML pages
 
@@ -132,10 +157,40 @@ def get_url():
     # On the html file comments are in the context_
     comment_div = soup.select("#content #content-text")
     comment_list = [x.text for x in comment_div]
+    global df_com
     # print(title, comment_list)
-    df_liste2 = pd.DataFrame(comment_list,columns=['text'])
+    df_com = pd.DataFrame(comment_list,columns=['text'])
     # print(df_liste2)
-    return render_template('result.html')
+
+    df_com['text']=df_com['text'].apply(lambda x: traitement(x))
+    df_com['lang']=df_com['text'].apply(lambda x: get_lang(x))
+    df_com=df_com[df_com['lang']=='EN']
+    df_com['polarite']=df_com['text'].apply(lambda x: TextBlob(x).sentiment.polarity)
+    df_com['pol_cat']=0
+
+    df_com['pol_cat'][df_com.polarite>0]=1
+    df_com['pol_cat'][df_com.polarite<0]=-1
+    df_com['pol_cat'][df_com.polarite==0]=0
+
+    df_com['stop_text']=df_com['text'].apply(lambda x: remove_stopwords(x))
+
+
+    y_pred = text_model.predict(df_com['stop_text'])
+
+    df_com['y_pred']= y_pred
+
+    df_com['y_pred'][df_com['y_pred']==-1] = 'Neg'
+    df_com['y_pred'][df_com['y_pred']==1] = 'Pos'
+    df_com['y_pred'][df_com['y_pred']==0] = 'Neu'
+    a = dict(df_com['y_pred'].value_counts(normalize=True))
+    P = a['Pos']
+    Neu = a['Neu']
+    Neg = a['Neg']
+
+    return render_template("result.html", P = P, Neg = Neg, Neu = Neu)
+
+
+
 
 
 """
@@ -166,55 +221,13 @@ def navbar():
 
 
 
-
-def traitement(x):
-    x=x.replace('\n',' ')
-    x=' '.join(word.strip(string.punctuation) for word in x.split())
-    x=x.lower()
-    return x
-
-# wget -O /tmp/lid.176.bin https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin
-PRETRAINED_MODEL_PATH = '/tmp/lid.176.bin'
-model = fasttext.load_model(PRETRAINED_MODEL_PATH)
-
-def get_lang(sentences):
-    
-    predictions = model.predict(sentences)
-    return predictions[0][0][-2:].upper()
-
-
-stop_words_fr = set(stopwords.words('french'))
-stop_words_en = set(stopwords.words('english'))
-
-def remove_stopwords(line):
-    word_tokens = word_tokenize(line)
-    ligne_filtre = [w for w in word_tokens if not w in stop_words_en]
-    return ' '.join(ligne_filtre)
-
-def get_review(df_com): 
-    df_com['text']=df_com['text'].apply(lambda x: traitement(x))
-    df_com['lang']=df_com['text'].apply(lambda x: get_lang(x))
-    df_com=df_com[df_com['lang']=='EN']
-    df_com['polarite']=df_com['text'].apply(lambda x: TextBlob(x).sentiment.polarity)
-    df_com['pol_cat']=0
-
-    df_com['pol_cat'][df_com.polarite>0]=1
-    df_com['pol_cat'][df_com.polarite<0]=-1
-    df_com['pol_cat'][df_com.polarite==0]=0
-
-    df_com['stop_text']=df_com['text'].apply(lambda x: remove_stopwords(x))
-
-    return df_com
-
-
-
 if __name__ == '__main__':
         app.run(debug=True, host='0.0.0.0', port=5001)
         #url = request.form.listvalues()
         # df_com = get_url()
         #get_review(get_url())
         get_url()
-        get_review()
+        
 
         
 
